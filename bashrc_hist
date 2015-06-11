@@ -1,0 +1,110 @@
+# Author: Alfred Jen-Chieh Huang
+# Purpose: a powerful replacement for bash "history" command
+# Algorithm:
+#    1. count the number of UPs 
+#    2. count the number of characters of a command
+#    3. compare 1. and 2.
+#    4. if 1) > 2), then output
+#    5. consider a long command, if the command is longer than 30, then output.
+# constants
+declare -i __HIST_DEBUG__=0
+
+function decho {
+    if (( "$__HIST_DEBUG__" == 1 )); then
+        echo $1
+    fi
+}
+
+function time_mark {
+    if (( "$__HIST_DEBUG__" == 1 )); then
+        stime=$(data +%s%N)
+        echo $1: $stime
+    fi
+}
+
+function hist {
+
+    declare -i ALL_HIST_COUNT=0
+    declare -i __LONG_CMD__=30
+
+    # set up debugging
+    if [[ "$1" == "-d" ]]; then
+        let __HIST_DEBUG__=1
+    else
+        let __HIST_DEBUG__=0
+    fi
+
+    if [[ "$HISTTIMEFORMAT" != "" ]]; then
+        echo "[ERROR] not support history with format"
+        return $TRUE
+    fi
+
+    #TMP_PATH=$(mktemp)
+    #history > $TEMP_PATH
+
+    # create a temp file, and put history to it.
+    OIFS=$IFS
+    IFS=$'\n'
+    hist_array=( $( history | awk -F" " '{$1="";print}' ) )
+    IFS=$OIFS
+    idx_array=( $( history | awk -F" " '{print $1}') )
+    let ALL_HIST_COUNT=${#idx_array[@]}
+ 
+    # easy function - see if you are winning in key press
+    declare -a output_array
+    declare -i output_array_size=0
+    PTN='\s*[0-9]*\s*'
+    
+    for ((i=0; i<$ALL_HIST_COUNT; i++))
+    do
+        let goodBargin=0
+        let longCmd=0
+
+        # the command we are working with
+        newHist=${hist_array[$i]}
+
+        # keyCnt = the number of UPs 
+        let keyCnt=$ALL_HIST_COUNT-$i
+        
+        # cmdLen = strlen(cmd) + "enter" 
+        let cmdLen=${#newHist}
+
+        if (( "$cmdLen" > "$keyCnt" )); then
+            let goodBargin=1
+        elif (( "$cmdLen" > "$__LONG_CMD__" )); then
+            let longCmd=1
+        else
+            continue
+        fi
+
+        if (( "$goodBargin" == 1 )) || (( "$longCmd" == 1 )); then
+            let found=0
+            let j=0
+
+            for ((j=0; j<$output_array_size; j++)); 
+            do
+                # check if duplicated
+                if [[ "$newHist" == "${output_array[$j]}" ]]; then
+                    let found=1
+                    break;
+                fi
+            done
+ 
+            # if not depulicated, add to the array, and print 
+            if (( ${found} == 0 )); then
+                # display with colors
+                if (( ${goodBargin} == 1)) && (( ${longCmd} == 1 )); then                    
+                    echo -e "\033[0;96m${idx_array[$i]})\033[0m\t\033[0;97m${hist_array[$i]}\033[0m"
+                elif (( ${goodBargin} == 1)); then
+                    echo -e "\033[0;96m${idx_array[$i]})\033[0m\t\033[0;97m${hist_array[$i]}\033[0m"
+                else
+                    echo -e "\033[0;96m${idx_array[$i]})\033[0m\t\033[0;97m${hist_array[$i]}\033[0m"
+                fi
+
+                # add to the list
+                output_array[$output_array_size]=$newHist
+                let output_array_size=$output_array_size+1
+            fi
+        fi
+    done
+}
